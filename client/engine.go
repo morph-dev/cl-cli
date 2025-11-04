@@ -6,9 +6,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/morph-dev/cl-cli/utils"
 )
 
 type EngineClient struct {
@@ -85,6 +87,33 @@ func (c *EngineClient) GetPayload(payloadId engine.PayloadID) (*engine.Execution
 		"chunkCount", len(executionPayload.ExecutionPayload.Chunks),
 	)
 	return &executionPayload, nil
+}
+
+func (c *EngineClient) GetChunk(payloadId engine.PayloadID, finalize bool) (*engine.ChunksEnvelope, error) {
+	var chunksEnvelope engine.ChunksEnvelope
+	if err := c.Call(&chunksEnvelope, "engine_getChunksV1", payloadId, finalize); err != nil {
+		return nil, err
+	}
+
+	var headerHash *common.Hash = nil
+	if chunksEnvelope.Header != nil {
+		hash := chunksEnvelope.Header.Hash()
+		headerHash = &hash
+	}
+
+	log.Info(
+		"engine_getChunksV1",
+		"chunks", len(chunksEnvelope.Chunks),
+		"nextPayloadId", chunksEnvelope.PayloadID,
+		"header", headerHash,
+	)
+	chunks := make([]*types.ChunkHeader, len(chunksEnvelope.Chunks))
+	for i, chunk := range chunksEnvelope.Chunks {
+		chunks[i] = chunk.Header
+	}
+	utils.PrintJson("Chunks", chunks)
+
+	return &chunksEnvelope, nil
 }
 
 func (c *EngineClient) NewPayload(

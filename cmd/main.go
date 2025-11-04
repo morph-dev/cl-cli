@@ -44,12 +44,31 @@ var (
 		Value:   1,
 		Usage:   "Number of blocks to create",
 	}
+	blockDurationFlag = &cli.DurationFlag{
+		Name:  "block-duration",
+		Value: 6 * time.Second,
+		Usage: "How long to wait between blocks",
+	}
+	chunksFlag = &cli.IntFlag{
+		Name:    "chunks",
+		Aliases: []string{"c"},
+		Value:   0,
+		Usage:   "Number of chunks to create",
+	}
+	chunkDurationFlag = &cli.DurationFlag{
+		Name:  "chunk-duration",
+		Value: time.Second,
+		Usage: "How long to wait between chunks",
+	}
 	buildBlockCommand = &cli.Command{
 		Name:  "build",
 		Usage: "Build new block",
 		Flags: []cli.Flag{
 			autoConfirmFlag,
 			blocksFlag,
+			blockDurationFlag,
+			chunksFlag,
+			chunkDurationFlag,
 		},
 		Action: buildBlock,
 	}
@@ -99,7 +118,13 @@ func buildBlock(ctx *cli.Context) (err error) {
 			time.Sleep(5 * time.Second)
 		}
 
-		if err := agent.BuildBlock(autoConfirm); err != nil {
+		chunks := ctx.Uint(chunksFlag.Name)
+		if chunks == 0 {
+			err = agent.BuildBlock(autoConfirm, ctx.Duration(blockDurationFlag.Name))
+		} else {
+			err = agent.BuildBlockWithChunks(autoConfirm, chunks, ctx.Duration(chunkDurationFlag.Name))
+		}
+		if err != nil {
 			return err
 		}
 	}
