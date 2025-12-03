@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/types/bal"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -70,7 +71,7 @@ func (c *EngineClient) GetPayload(payloadId engine.PayloadID) (*engine.Execution
 	case payloadId.Is(engine.PayloadV1):
 		method = "engine_getPayloadV1"
 	default:
-		return nil, fmt.Errorf("Unknown payload version: %v", payloadId)
+		return nil, fmt.Errorf("unknown payload version: %v", payloadId)
 	}
 
 	var executionPayload engine.ExecutionPayloadEnvelope
@@ -128,6 +129,39 @@ func (c *EngineClient) NewPayload(
 	}
 	log.Info(
 		"engine_newPayloadV5",
+		"status", payloadStatus.Status,
+		"latestValidHash", payloadStatus.LatestValidHash,
+	)
+	return &payloadStatus, nil
+}
+
+func (c *EngineClient) NewChunkAccessList(
+	parentHash common.Hash,
+	chunkHeader types.ChunkHeader,
+	cal bal.BlockAccessList,
+) (*engine.PayloadStatusV1, error) {
+	var payloadStatus engine.PayloadStatusV1
+	if err := c.Call(&payloadStatus, "engine_newChunkAccessList", parentHash, chunkHeader, cal); err != nil {
+		return nil, err
+	}
+	log.Info(
+		"engine_newChunkAccessList",
+		"status", payloadStatus.Status,
+		"latestValidHash", payloadStatus.LatestValidHash,
+	)
+	return &payloadStatus, nil
+}
+
+func (c *EngineClient) ExecuteChunk(
+	blockMetadata *types.ChunkBlockMetadata,
+	chunk engine.ExecutionChunk,
+) (*engine.PayloadStatusV1, error) {
+	var payloadStatus engine.PayloadStatusV1
+	if err := c.Call(&payloadStatus, "engine_executeChunk", blockMetadata, chunk); err != nil {
+		return nil, err
+	}
+	log.Info(
+		"engine_executeChunk",
 		"status", payloadStatus.Status,
 		"latestValidHash", payloadStatus.LatestValidHash,
 	)

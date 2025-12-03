@@ -64,6 +64,7 @@ func (a *Agent) BuildBlockWithChunks(autoConfirm bool, chunkPayloads uint, chunk
 		payloadId      *engine.PayloadID
 		chunksEnvelope *engine.ChunksEnvelope
 		chunks         []*engine.ChunkPayload
+		blockMetadata  *types.ChunkBlockMetadata
 	)
 
 	// Get current head of the chain
@@ -86,6 +87,7 @@ func (a *Agent) BuildBlockWithChunks(autoConfirm bool, chunkPayloads uint, chunk
 		}
 		chunks = append(chunks, chunksEnvelope.Chunks...)
 		payloadId = chunksEnvelope.PayloadID
+		blockMetadata = &chunksEnvelope.BlockMetadata
 	}
 
 	header := chunksEnvelope.Header
@@ -99,7 +101,7 @@ func (a *Agent) BuildBlockWithChunks(autoConfirm bool, chunkPayloads uint, chunk
 		return nil
 	}
 
-	if err = a.newHeadFromChunks(chunks, header); err != nil {
+	if err = a.newHeadFromChunks(chunks, blockMetadata, header); err != nil {
 		return err
 	}
 
@@ -161,7 +163,34 @@ func (a *Agent) newHeadFromExecutionPayload(executionPayload *engine.ExecutionPa
 	)
 }
 
-func (a *Agent) newHeadFromChunks(chunks []*engine.ChunkPayload, header *types.Header) error {
+func (a *Agent) newHeadFromChunks(chunks []*engine.ChunkPayload, blockMetadata *types.ChunkBlockMetadata, header *types.Header) error {
+	for _, chunk := range chunks {
+		log.Info("New CAL", "chunk_index", chunk.Header.ChunkIndex)
+		payloadStatus, err := a.engineClient.NewChunkAccessList(header.ParentHash, *chunk.Header, *chunk.AccessList)
+		if err != nil {
+			return err
+		}
+		if payloadStatus.Status != engine.ACCEPTED {
+			return fmt.Errorf("NewChunkAccessList status is not ACCEPTED, response: %v", payloadStatus)
+		}
+	}
+
+	for i := len(chunks) - 1; i >= 0; i-- {
+		chunk := chunks[i]
+
+		payloadStatus, err := a.engineClient.ExecuteChunk(blockMetadata, engine.ExecutionChunk{
+			Header: *chunk.Header,
+			Transactions:/* chunk.Transactions= */ nil,
+			Withdrawals: chunk.Withdrawals,
+		})
+		if err != nil {
+			return err
+		}
+		if payloadStatus.Status != engine.VALID {
+			return fmt.Errorf("ExecuteChunk status is not VALID, response: %v", payloadStatus)
+		}
+	}
+
 	executableData, blobsBundle, requests := aggregateChunks(chunks, header)
 	return a.newHead(executableData, blobsBundle.Commitments, header.ParentBeaconRoot, requests)
 }
