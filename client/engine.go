@@ -6,11 +6,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/types/bal"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/morph-dev/cl-cli/utils"
 )
 
 type EngineClient struct {
@@ -44,6 +43,7 @@ func (c *EngineClient) ForkchoiceUpdated(
 	payloadAttributes *engine.PayloadAttributes,
 ) (*engine.ForkChoiceResponse, error) {
 	var forkchoiceResponse engine.ForkChoiceResponse
+	log.Debug("engine_forkchoiceUpdatedV3", "head", update.HeadBlockHash)
 	if err := c.Call(&forkchoiceResponse, "engine_forkchoiceUpdatedV3", update, payloadAttributes); err != nil {
 		return nil, err
 	}
@@ -73,47 +73,21 @@ func (c *EngineClient) GetPayload(payloadId engine.PayloadID) (*engine.Execution
 		return nil, fmt.Errorf("Unknown payload version: %v", payloadId)
 	}
 
+	log.Debug(method, "payloadId", payloadId)
 	var executionPayload engine.ExecutionPayloadEnvelope
 	if err := c.Call(&executionPayload, method, payloadId); err != nil {
 		return nil, err
 	}
 	log.Info(
 		method,
+		"payloadId", payloadId,
 		"number", executionPayload.ExecutionPayload.Number,
 		"hash", executionPayload.ExecutionPayload.BlockHash,
 		"parent", executionPayload.ExecutionPayload.ParentHash,
-		"txCount", len(executionPayload.ExecutionPayload.Transactions),
 		"blobCount", len(executionPayload.BlobsBundle.Blobs),
-		"chunkCount", len(executionPayload.ExecutionPayload.Chunks),
+		"chunkCount", len(executionPayload.Chunks),
 	)
 	return &executionPayload, nil
-}
-
-func (c *EngineClient) GetChunk(payloadId engine.PayloadID, finalize bool) (*engine.ChunksEnvelope, error) {
-	var chunksEnvelope engine.ChunksEnvelope
-	if err := c.Call(&chunksEnvelope, "engine_getChunksV1", payloadId, finalize); err != nil {
-		return nil, err
-	}
-
-	var headerHash *common.Hash = nil
-	if chunksEnvelope.Header != nil {
-		hash := chunksEnvelope.Header.Hash()
-		headerHash = &hash
-	}
-
-	log.Info(
-		"engine_getChunksV1",
-		"chunks", len(chunksEnvelope.Chunks),
-		"nextPayloadId", chunksEnvelope.PayloadID,
-		"header", headerHash,
-	)
-	chunks := make([]*types.ChunkHeader, len(chunksEnvelope.Chunks))
-	for i, chunk := range chunksEnvelope.Chunks {
-		chunks[i] = chunk.Header
-	}
-	utils.PrintJson("Chunks", chunks)
-
-	return &chunksEnvelope, nil
 }
 
 func (c *EngineClient) NewPayload(
@@ -122,14 +96,110 @@ func (c *EngineClient) NewPayload(
 	beaconRoot *common.Hash,
 	executionRequests [][]byte,
 ) (*engine.PayloadStatusV1, error) {
+	log.Debug(
+		"engine_newPayloadV5",
+		"blockHash", params.BlockHash,
+	)
 	var payloadStatus engine.PayloadStatusV1
 	if err := c.Call(&payloadStatus, "engine_newPayloadV5", params, blobHashes, beaconRoot, executionRequests); err != nil {
 		return nil, err
 	}
 	log.Info(
 		"engine_newPayloadV5",
+		"blockHash", params.BlockHash,
 		"status", payloadStatus.Status,
 		"latestValidHash", payloadStatus.LatestValidHash,
+	)
+	return &payloadStatus, nil
+}
+
+func (c *EngineClient) NewBlockHeader(
+	data engine.ExecutableData,
+	beaconRoot common.Hash,
+	blobHashes []common.Hash,
+	requests [][]byte,
+	chunkCount int,
+) (*engine.PayloadStatusV1, error) {
+	log.Debug(
+		"engine_newBlockHeaderV1",
+		"blockHash", data.BlockHash,
+		"chunkCount", chunkCount,
+	)
+	var payloadStatus engine.PayloadStatusV1
+	if err := c.Call(&payloadStatus, "engine_newBlockHeaderV1", data, beaconRoot, blobHashes, requests, chunkCount); err != nil {
+		return nil, err
+	}
+	log.Info(
+		"engine_newBlockHeaderV1",
+		"blockHash", data.BlockHash,
+		"chunkCount", chunkCount,
+		"status", payloadStatus.Status,
+	)
+	return &payloadStatus, nil
+}
+
+func (c *EngineClient) NewChunkAccessList(
+	blockHash common.Hash,
+	chunkIndex uint16,
+	cal bal.BlockAccessList,
+) (*engine.PayloadStatusV1, error) {
+	log.Debug(
+		"engine_newChunkAccessListV1",
+		"blockHash", blockHash,
+		"chunk", chunkIndex,
+	)
+	var payloadStatus engine.PayloadStatusV1
+	if err := c.Call(&payloadStatus, "engine_newChunkAccessListV1", blockHash, chunkIndex, cal); err != nil {
+		return nil, err
+	}
+	log.Info(
+		"engine_newChunkAccessListV1",
+		"blockHash", blockHash,
+		"chunk", chunkIndex,
+		"status", payloadStatus.Status,
+	)
+	return &payloadStatus, nil
+}
+
+func (c *EngineClient) ExecuteChunk(
+	blockHash common.Hash,
+	chunk engine.ExecutionChunkBody,
+) (*engine.PayloadStatusV1, error) {
+	log.Debug(
+		"engine_executeChunkV1",
+		"blockHash", blockHash,
+		"chunk", chunk.ChunkHeader.Index,
+		"txCound", len(chunk.Transactions),
+	)
+	var payloadStatus engine.PayloadStatusV1
+	if err := c.Call(&payloadStatus, "engine_executeChunkV1", blockHash, chunk); err != nil {
+		return nil, err
+	}
+	log.Info(
+		"engine_executeChunkV1",
+		"blockHash", blockHash,
+		"chunk", chunk.ChunkHeader.Index,
+		"txCound", len(chunk.Transactions),
+		"status", payloadStatus.Status,
+	)
+	return &payloadStatus, nil
+}
+
+func (c *EngineClient) FinalizeBlock(
+	blockHash common.Hash,
+) (*engine.PayloadStatusV1, error) {
+	log.Debug(
+		"engine_finalizeBlockV1",
+		"blockHash", blockHash,
+	)
+	var payloadStatus engine.PayloadStatusV1
+	if err := c.Call(&payloadStatus, "engine_finalizeBlockV1", blockHash); err != nil {
+		return nil, err
+	}
+	log.Info(
+		"engine_finalizeBlockV1",
+		"blockHash", blockHash,
+		"status", payloadStatus.Status,
 	)
 	return &payloadStatus, nil
 }
