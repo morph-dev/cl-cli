@@ -163,7 +163,7 @@ func (c *EngineClient) NewChunkAccessList(
 
 func (c *EngineClient) ExecuteChunk(
 	blockHash common.Hash,
-	chunk engine.ExecutionChunkBody,
+	chunk engine.ExecutionChunk,
 ) (*engine.PayloadStatusV1, error) {
 	log.Debug(
 		"engine_executeChunkV1",

@@ -149,7 +149,7 @@ func (a *Agent) newBlockHeader(payload *engine.ExecutionPayloadEnvelope, beaconR
 }
 
 // Sends CAL to EL
-func (a *Agent) sendCal(blockHash common.Hash, chunk engine.ExecutionChunk) error {
+func (a *Agent) sendCal(blockHash common.Hash, chunk engine.ExecutionChunkWithCal) error {
 	payloadStatus, err := a.engineClient.NewChunkAccessList(
 		blockHash,
 		chunk.ChunkHeader.Index,
@@ -169,8 +169,8 @@ func (a *Agent) sendCal(blockHash common.Hash, chunk engine.ExecutionChunk) erro
 }
 
 // Sends chunk to EL, executes and validates it
-func (a *Agent) executeChunk(blockHash common.Hash, chunk engine.ExecutionChunk) error {
-	chunkBody := engine.ExecutionChunkBody{
+func (a *Agent) executeChunk(blockHash common.Hash, chunk engine.ExecutionChunkWithCal) error {
+	chunkBody := engine.ExecutionChunk{
 		ChunkHeader:  chunk.ChunkHeader,
 		Transactions: chunk.Transactions,
 		Withdrawals:  chunk.Withdrawals,
